@@ -2336,15 +2336,7 @@ class Launcher:
             restart = True
         try:
             for config in configs:
-                exe, _results = add_steam_shortcuts(config / 'shortcuts.vdf')
-                # Library pictures: each game's cover, header and hero from the box art of the game folder.
-                for key, name, options in steam_games():
-                    try:
-                        import uncharted_art
-                        uncharted_art.steam_artwork(game_folder(self.app, key) or game_folder(self.app, 'u1'),
-                                                    config / 'grid', bbport_steam.shortcut_id(f'"{exe}"', name), key)
-                    except Exception:  # pictures are a nicety: the shortcut works without them
-                        pass
+                add_steam_games(config)
         except (OSError, ValueError) as error:
             self.messagebox.showerror(NAME, _('Could not add the games to Steam: {}').format(error))
             return
@@ -2459,17 +2451,36 @@ def steam_games():
     return [(key, STEAM_TITLES[key], f'{play} {key}') for key, _t, _s, _e in GAMES]
 
 
-def add_steam_shortcuts(vdf_path, now=None):
-    """The three games in one shortcuts.vdf. The old single collection entry is replaced only when
-    it starts this launcher with a plain --play; every other entry stays as it is."""
+def add_steam_shortcuts(vdf_path, now=None, icons=None):
+    """The three games in one shortcuts.vdf, each with its icon (icons: game key -> picture, else
+    the exe). The old single collection entry is replaced only when it starts this launcher with a
+    plain --play; every other entry stays as it is."""
     import bbport_steam
     exe, play = steam_launch()
 
     def old_collection(fields):
         return (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
                 and str(fields.get('launchoptions', '')).strip() == play)
-    wanted = [(name, str(exe), str(PORT_DIR), str(exe), options) for _key, name, options in steam_games()]
+    wanted = [(name, str(exe), str(PORT_DIR), str((icons or {}).get(key, exe)), options)
+              for key, name, options in steam_games()]
     return exe, bbport_steam.set_shortcuts(vdf_path, wanted, old_collection, now)
+
+
+def add_steam_games(config, now=None):
+    """One Steam account (userdata/<id>/config): each game's library pictures in grid/ (the
+    player's art/<game>_<kind> files, else made from the game's poster), then the three shortcuts,
+    each with its own icon."""
+    import bbport_steam
+    exe, _play = steam_launch()
+    icons = {}
+    for key, name, _options in steam_games():
+        try:
+            import uncharted_art
+            pictures = uncharted_art.steam_game_art(Path(config) / 'grid', bbport_steam.shortcut_id(f'"{exe}"', name), key)
+            icons[key] = str(pictures['icon'])
+        except Exception:  # pictures are a nicety: the shortcut works without them
+            pass
+    return add_steam_shortcuts(Path(config) / 'shortcuts.vdf', now, icons)
 
 
 def play_request(args):
