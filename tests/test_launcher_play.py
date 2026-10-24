@@ -41,6 +41,17 @@ class PlayArguments(unittest.TestCase):
         self.assertEqual(launcher.game_environment(settings, 'u3')['BB_EXE'], 'u3')
         self.assertEqual(launcher.game_environment(settings)['BB_EXE'], 'u1')
 
+    def test_play_game_goes_past_the_collection_menu(self):
+        settings = {**launcher.APP_DEFAULTS, 'game_dir': 'x', 'start': 'u3'}
+        env = launcher.play_environment(settings, 'u1')
+        self.assertEqual((env['BB_EXE'], env['BB_START_GAME']), ('u1', 'u1'))
+        # plain --play (the selected game) shows the menu as before, whatever the outer environment says
+        launcher.os.environ['BB_START_GAME'] = 'u1'
+        try:
+            self.assertNotIn('BB_START_GAME', launcher.play_environment(settings))
+        finally:
+            del launcher.os.environ['BB_START_GAME']
+
 
 def shortcut(name, exe, options, last_play=0):
     entry = bbport_steam.entry(name, exe, str(Path(exe).parent), exe, options)
