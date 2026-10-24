@@ -437,9 +437,10 @@ def _framed(art, size):
     return background
 
 
-def steam_artwork(game_dir, grid_dir, appid, custom_art='', crops=None):
-    """Steam library pictures for the shortcut with this id: cover (p), header, hero.
-    Returns the files written; nothing when the game folder has no art."""
+def steam_artwork(game_dir, grid_dir, appid, key=None, custom_art='', crops=None):
+    """Steam library pictures for the shortcut with this id: cover (p), header, hero. With a
+    game key the cover is that game's poster (load_art: the player's art folder first, then the
+    port's covers); a custom image replaces both. Returns the files written; nothing when the game folder has no art."""
     art = None
     if custom_art:
         try:
@@ -451,6 +452,7 @@ def steam_artwork(game_dir, grid_dir, appid, custom_art='', crops=None):
     art = art or cover(game_dir)
     if art is None:
         return []
+    poster = load_art(POSTERS[key]) if key in POSTERS else None
     grid_dir = Path(grid_dir)
     grid_dir.mkdir(parents=True, exist_ok=True)
     if custom:
@@ -459,7 +461,7 @@ def steam_artwork(game_dir, grid_dir, appid, custom_art='', crops=None):
                     f'{appid}.png': crop_image(art, (920, 430), crops.get('header')),
                     f'{appid}_hero.png': crop_image(art, (1920, 620), crops.get('hero'))}
     else:
-        pictures = {f'{appid}p.png': _framed(art, (600, 900)), f'{appid}.png': _framed(art, (920, 430))}
+        pictures = {f'{appid}p.png': _framed(poster or art, (600, 900)), f'{appid}.png': _framed(art, (920, 430))}
         try:
             with Image.open(Path(game_dir) / 'sce_sys' / 'pic1.png') as wide:
                 pictures[f'{appid}_hero.png'] = _fill(wide.convert('RGB'), (1920, 620))
