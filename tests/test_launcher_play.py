@@ -141,6 +141,27 @@ class SteamShortcuts(unittest.TestCase):
         self.assertIsNone(saved)
         self.assertEqual(sorted(self.entries()), ['0', '1', '2'])
 
+    def test_collection_entry_replaces_the_three_games(self):
+        launcher.add_steam_shortcuts(self.vdf, now=1)
+        exe, (results, saved) = launcher.add_collection_shortcut(self.vdf, now=2)
+        self.assertEqual(exe, self.exe)
+        self.assertEqual(results, ['replaced'])
+        entries = self.entries()
+        self.assertEqual(sorted(entries), ['0', '1', '2', '3'])  # the two extra game entries gone
+        for key, value in self.others.items():  # untouched, same slot (u2 --custom too)
+            self.assertEqual(entries[key], value)
+        f = fields(entries['1'])
+        self.assertEqual((f['AppName'], f['Exe'], f['LaunchOptions']),
+                         (launcher.COLLECTION_TITLE, f'"{self.exe}"', self.play))
+        self.assertEqual(launcher.play_request(f['LaunchOptions'].split()[-1:]), '')
+        self.assertIsNotNone(saved)
+
+    def test_collection_again_updates(self):
+        launcher.add_collection_shortcut(self.vdf, now=1)
+        _exe, (results, _saved) = launcher.add_collection_shortcut(self.vdf, now=2)
+        self.assertEqual(results, ['updated'])
+        self.assertEqual(len(self.entries()), 4)
+
     def test_kinds(self):
         f = {k: t for t, k, _v in bbport_steam.entry('n', 'e', 's', 'i', 'o')}
         self.assertEqual((f['appid'], f['LaunchOptions']), (INT32, STRING))

@@ -201,7 +201,7 @@ APP_DEFAULTS = {'game_dir': '', 'game_dir_u1': '', 'game_dir_u2': '', 'game_dir_
                 'anti_aliasing': 'off', 'aa_sharpness': '0.2', 'frame_generation': 'off',
                 'frame_gen_multiplier': '2', 'extra_env': '', 'close_on_play': False,
                 'mouse_look': True, 'mouse_sensitivity': '1.0', 'mouse_invert_y': False,
-                'pad_invert_y': False, 'art_banner': '', 'art_u1': '', 'art_u2': '', 'art_u3': '', 'steam_art': '', 'art_crops': {}, 'shortcut_name': 'Uncharted: The Nathan Drake Collection', 'shortcut_icon': '', 'trophy_game': 'u1', 'pad_vibration': True, 'pad_vibration_strength': '100', 'button_prompts': 'auto', 'key_bindings': {}, 'pad_bindings': {}, 'check_updates': True,
+                'pad_invert_y': False, 'art_banner': '', 'art_u1': '', 'art_u2': '', 'art_u3': '', 'steam_art': '', 'art_crops': {}, 'shortcut_name': 'Uncharted: The Nathan Drake Collection', 'shortcut_icon': '', 'steam_entries': 'collection', 'trophy_game': 'u1', 'pad_vibration': True, 'pad_vibration_strength': '100', 'button_prompts': 'auto', 'key_bindings': {}, 'pad_bindings': {}, 'check_updates': True,
                 **{key: 'auto' for key in FIXES},
                 **{f'{game}_infinite_{cheat}': False for game, _t, _s, _e in GAMES for cheat in ('health', 'ammo')}}
 
@@ -1154,14 +1154,19 @@ class Launcher:
         tk.Frame(shell, bg=SURFACE, height=1).pack(fill='x', padx=self.px(22), pady=(self.px(4), self.px(8)))
         row = tk.Frame(shell, bg=SURFACE)
         row.pack(fill='x', padx=self.px(22), pady=(0, self.px(8)))
-        self.toggle(row, self.var('fullscreen'), SURFACE).pack(side='left')
+        self.toggle(row, self.var('fullscreen'), SURFACE).pack(side='left', anchor='n', pady=(self.px(4), 0))
         fullscreen = tk.Label(row, text=_('Fullscreen'), bg=SURFACE, fg=TEXT, font=self.font_ui, cursor='hand2')
-        fullscreen.pack(side='left', padx=(self.px(10), 0))
+        fullscreen.pack(side='left', anchor='n', padx=(self.px(10), 0), pady=(self.px(4), 0))
         fullscreen.bind('<Button-1>', lambda _e: self.var('fullscreen').set(not self.var('fullscreen').get()))
-        self.pill(row, _('Add to Steam'), self.add_to_steam, background=SURFACE, padding=(14, 6)).pack(
-            side='left', padx=(self.px(24), 0))
+        # Add to Steam, with the kind of entries under it (one for the collection or one per game).
+        steam = tk.Frame(row, bg=SURFACE)
+        steam.pack(side='left', anchor='n', padx=(self.px(24), 0))
+        self.pill(steam, _('Add to Steam'), self.add_to_steam, background=SURFACE, padding=(14, 6)).pack(anchor='w')
+        self.choice(steam, 'steam_entries', [('collection', 'One entry for the collection'),
+                                             ('games', 'One entry per game')], width=26).pack(
+            anchor='w', pady=(self.px(6), 0))
         self.pill(row, _('Desktop shortcut'), self.shortcut, background=SURFACE, padding=(14, 6)).pack(
-            side='left', padx=(self.px(8), 0))
+            side='left', anchor='n', padx=(self.px(8), 0))
         self.ready = tk.Label(shell, text='', bg=SURFACE, fg=MUTED, font=self.font_ui_sm,
                               wraplength=self.px(820), justify='left')
         self.ready.pack(anchor='w', padx=self.px(22), pady=(0, self.px(16)))
@@ -2311,7 +2316,108 @@ class Launcher:
             self.messagebox.showerror(NAME, result.stderr.decode(errors='replace')[:400])
 
     def add_to_steam(self):
-        """The three games in the Steam library (non-Steam games that start Uncharted.exe --play u1/u2/u3)."""
+        """Add to Steam as the choice under the button says (steam_entries): one entry for the
+        collection (its pictures chosen first, in collection_art) or one per game (--play u1/u2/u3,
+        each with its own pictures). Adding one kind replaces the other's entries."""
+        self.collect()
+        if self.app.get('steam_entries') == 'games':
+            self.write_to_steam('games')
+        else:
+            self.collection_art()
+
+    def collection_art(self):
+        """Preview the collection art before writing the collection's Steam entry."""
+        from PIL import Image, ImageTk
+        import uncharted_art
+
+        window = self.tk.Toplevel(self.root)
+        window.title(_('Add to Steam'))
+        window.configure(bg=PANEL)
+        window.transient(self.root)
+        window.grab_set()
+        window.resizable(False, False)
+        shell = self.tk.Frame(window, bg=PANEL)
+        shell.pack(padx=self.px(24), pady=self.px(22))
+        self.tk.Label(shell, text=_('Add collection to Steam'), bg=PANEL, fg=TEXT,
+                      font=self.font_title).grid(row=0, column=0, columnspan=3, sticky='w')
+        self.tk.Label(shell, text=_('Use one image and adjust each Steam format separately.'), bg=PANEL,
+                      fg=MUTED, font=self.font_ui).grid(row=1, column=0, columnspan=3, sticky='w', pady=(2, 14))
+        formats = [('portrait', _('Portrait'), (600, 900), (150, 225)),
+                   ('header', _('Header'), (920, 430), (230, 108)),
+                   ('hero', _('Hero'), (1920, 620), (300, 97))]
+        previews = {}
+        photos = {}
+        selected = {'path': self.app.get('steam_art', ''),
+                    'crops': {name: dict(self.app.get('art_crops', {}).get(f'steam_{name}', {}))
+                              for name, _label, _size, _preview in formats}}
+
+        def redraw():
+            for column, (name, label, size, preview_size) in enumerate(formats):
+                canvas = previews[name]
+                canvas.delete('all')
+                try:
+                    with Image.open(selected['path']) as source:
+                        image = uncharted_art.crop_image(
+                            source.convert('RGB'), preview_size, selected['crops'][name])
+                    photos[name] = ImageTk.PhotoImage(image)
+                    canvas.create_image(0, 0, image=photos[name], anchor='nw')
+                except (OSError, ValueError, self.tk.TclError):
+                    canvas.create_text(preview_size[0] // 2, preview_size[1] // 2,
+                                       text=_('Choose image'), fill=MUTED, font=self.font_ui_sm)
+                canvas.create_rectangle(1, 1, preview_size[0] - 2, preview_size[1] - 2,
+                                        outline=GOLD_DIM, width=2)
+
+        def choose(candidate=''):
+            chosen = candidate or self.image_path(_('Collection image'), selected['path'])
+            if chosen:
+                try:
+                    with Image.open(chosen) as image:
+                        image.verify()
+                except (OSError, ValueError) as error:
+                    self.messagebox.showerror(NAME, _('This image could not be opened: {}').format(error))
+                    return
+                selected['path'] = chosen
+                redraw()
+
+        def adjust(name, label, size):
+            result = self.edit_art('steam_art', label, size, f'steam_{name}',
+                                   initial_path=selected['path'], initial_crop=selected['crops'][name])
+            if result:
+                selected['path'], selected['crops'][name] = result
+                redraw()
+
+        for column, (name, label, size, preview_size) in enumerate(formats):
+            cell = self.tk.Frame(shell, bg=PANEL)
+            cell.grid(row=2, column=column, sticky='n', padx=(0 if column == 0 else 16, 0))
+            self.tk.Label(cell, text=label, bg=PANEL, fg=TEXT, font=self.font_ui_md).pack(anchor='w')
+            canvas = self.tk.Canvas(cell, width=preview_size[0], height=preview_size[1], bg=BG,
+                                    highlightthickness=0, cursor='hand2')
+            canvas.pack(pady=(6, 8))
+            previews[name] = canvas
+            canvas.bind('<Button-1>', lambda _e, n=name, l=label, s=size: adjust(n, l, s))
+            self.enable_image_drop(canvas, choose)
+            self.pill(cell, _('Adjust crop'), lambda n=name, l=label, s=size: adjust(n, l, s),
+                      background=PANEL, padding=(12, 6)).pack(anchor='w')
+        footer = self.tk.Frame(shell, bg=PANEL)
+        footer.grid(row=3, column=0, columnspan=3, sticky='ew', pady=(18, 0))
+        self.pill(footer, _('Choose image'), choose, background=PANEL).pack(side='left')
+        self.pill(footer, _('Cancel'), window.destroy, kind='ghost', background=PANEL).pack(side='right')
+
+        def add():
+            self.app['steam_art'] = selected['path']
+            self.app.setdefault('art_crops', {}).update(
+                {f'steam_{name}': crop for name, crop in selected['crops'].items()})
+            self.collect()
+            window.destroy()
+            self.write_to_steam('collection')
+
+        self.pill(footer, _('Add to Steam'), add, kind='primary', background=PANEL).pack(side='right', padx=(0, 6))
+        redraw()
+        window.bind('<Escape>', lambda _event: window.destroy())
+
+    def write_to_steam(self, kind):
+        """Writes the Steam entries of this kind ('collection' or 'games'), closing Steam while it
+        is done when it runs."""
         import bbport_steam
         steam = bbport_steam.steam_folder()
         configs = bbport_steam.user_configs(steam) if steam else []
@@ -2336,14 +2442,21 @@ class Launcher:
             restart = True
         try:
             for config in configs:
-                add_steam_games(config)
+                if kind == 'games':
+                    add_steam_games(config)
+                else:
+                    add_steam_collection(config, self.app)
         except (OSError, ValueError) as error:
             self.messagebox.showerror(NAME, _('Could not add the games to Steam: {}').format(error))
             return
         if restart:
             os.startfile('steam://open/games')
-        self.messagebox.showinfo(NAME, _('Uncharted 1, 2 and 3 are in your Steam library. Each starts with the '
-                                         'settings saved in this launcher.'))
+        if kind == 'games':
+            self.messagebox.showinfo(NAME, _('Uncharted 1, 2 and 3 are in your Steam library. Each starts with the '
+                                             'settings saved in this launcher.'))
+        else:
+            self.messagebox.showinfo(NAME, _('The collection is in your Steam library. It starts with the settings '
+                                             'saved in this launcher.'))
 
     def close(self):
         try:
@@ -2481,6 +2594,37 @@ def add_steam_games(config, now=None):
         except Exception:  # pictures are a nicety: the shortcut works without them
             pass
     return add_steam_shortcuts(Path(config) / 'shortcuts.vdf', now, icons)
+
+
+def add_collection_shortcut(vdf_path, now=None):
+    """The single collection entry (a plain --play: the game selected in the launcher) in one
+    shortcuts.vdf. It replaces this launcher's three game entries; every other entry stays."""
+    import bbport_steam
+    exe, play = steam_launch()
+    games = {options for _key, _name, options in steam_games()}
+
+    def game_entry(fields):
+        return (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
+                and str(fields.get('launchoptions', '')).strip() in games)
+    wanted = [(COLLECTION_TITLE, str(exe), str(PORT_DIR), str(exe), play)]
+    return exe, bbport_steam.set_shortcuts(vdf_path, wanted, game_entry, now)
+
+
+def add_steam_collection(config, settings, now=None):
+    """One Steam account (userdata/<id>/config): the collection entry, then its library pictures
+    (the image and crops chosen in Add to Steam, else the game folder's box art)."""
+    import bbport_steam
+    exe, result = add_collection_shortcut(Path(config) / 'shortcuts.vdf', now)
+    try:
+        import uncharted_art
+        uncharted_art.steam_artwork(
+            game_folder(settings, 'u1') or game_folder(settings, 'u2'), Path(config) / 'grid',
+            bbport_steam.shortcut_id(f'"{exe}"', COLLECTION_TITLE), custom_art=settings.get('steam_art', ''),
+            crops={name: settings.get('art_crops', {}).get(f'steam_{name}', {})
+                   for name in ('portrait', 'header', 'hero')})
+    except Exception:  # pictures are a nicety: the shortcut works without them
+        pass
+    return exe, result
 
 
 def play_request(args):
