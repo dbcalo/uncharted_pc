@@ -91,5 +91,51 @@ class DeckDefaults(unittest.TestCase):
         self.assertIn('800', dict(launcher.RENDER_HEIGHTS))
 
 
+
+class FirstRun(unittest.TestCase):
+    def test_first_page(self):
+        self.assertEqual(launcher.first_page({}), 'game')
+        self.assertEqual(launcher.first_page({**launcher.APP_DEFAULTS}), 'game')
+        self.assertEqual(launcher.first_page({**launcher.APP_DEFAULTS, 'game_dir': '/x'}), 'play')
+        self.assertEqual(launcher.first_page({**launcher.APP_DEFAULTS, 'game_dir_u2': '/x'}), 'play')
+
+    def test_deck_hint(self):
+        ready = {**launcher.APP_DEFAULTS, 'game_dir': '/x'}
+        with mock.patch.object(launcher, 'is_steam_deck', return_value=True):
+            self.assertEqual(launcher.deck_hint(ready), 'Next: Add to Steam, then play from Gaming Mode.')
+            self.assertEqual(launcher.deck_hint({**ready, 'steam_added': True}), '')
+            self.assertEqual(launcher.deck_hint({**launcher.APP_DEFAULTS}), '')  # no game folder yet
+        with mock.patch.object(launcher, 'is_steam_deck', return_value=False):
+            self.assertEqual(launcher.deck_hint(ready), '')
+
+    def test_steam_added_after_writing(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        steam = Path(folder.name)
+        (steam / 'userdata' / '7' / 'config').mkdir(parents=True)
+        ui = mock.Mock()
+        ui.app = {**launcher.APP_DEFAULTS}
+        with mock.patch('bbport_steam.steam_folder', return_value=steam), \
+                mock.patch('bbport_steam.steam_running', return_value=False), \
+                mock.patch.object(launcher, 'add_steam_collection'), \
+                mock.patch.object(launcher, 'write_control_layout'):
+            launcher.Launcher.write_to_steam(ui, 'collection')
+        self.assertIs(ui.app['steam_added'], True)
+        self.assertEqual(launcher.APP_DEFAULTS['steam_added'], False)
+
+    def test_failed_write_leaves_steam_added(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        steam = Path(folder.name)
+        (steam / 'userdata' / '7' / 'config').mkdir(parents=True)
+        ui = mock.Mock()
+        ui.app = {**launcher.APP_DEFAULTS}
+        with mock.patch('bbport_steam.steam_folder', return_value=steam), \
+                mock.patch('bbport_steam.steam_running', return_value=False), \
+                mock.patch.object(launcher, 'add_steam_collection', side_effect=OSError('disk')):
+            launcher.Launcher.write_to_steam(ui, 'collection')
+        self.assertIs(ui.app['steam_added'], False)
+
+
 if __name__ == '__main__':
     unittest.main()

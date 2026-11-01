@@ -235,6 +235,7 @@ APP_DEFAULTS = {'game_dir': '', 'game_dir_u1': '', 'game_dir_u2': '', 'game_dir_
                 'gyro_precision_speed': '0.75', 'gyro_invert_x': False, 'gyro_invert_y': False,
                 'gyro_space': '4', 'gyro_local_angle': '0.00', 'gyro_complement': '100.00',
                 'gyro_rotate': '0.00', 'art_banner': '', 'art_u1': '', 'art_u2': '', 'art_u3': '', 'steam_art': '', 'art_crops': {}, 'shortcut_name': 'Uncharted: The Nathan Drake Collection', 'shortcut_icon': '', 'steam_entries': 'collection', 'trophy_game': 'u1', 'pad_vibration': True, 'pad_vibration_strength': '100', 'button_prompts': 'auto', 'key_bindings': {}, 'pad_bindings': {}, 'check_updates': True,
+                'steam_added': False,
                 **{key: 'auto' for key in FIXES},
                 **{f'{game}_infinite_{cheat}': False for game, _t, _s, _e in GAMES for cheat in ('health', 'ammo')}}
 
@@ -257,6 +258,19 @@ def is_steam_deck(dmi=Path('/sys/devices/virtual/dmi/id')):
     except OSError:
         return False
     return vendor == 'Valve' and product in ('Jupiter', 'Galileo')
+
+
+def first_page(settings):
+    """The page the launcher opens on: the game folder until one is chosen, then Play."""
+    folders = ('game_dir', 'game_dir_u1', 'game_dir_u2', 'game_dir_u3')
+    return 'play' if any(settings.get(key) for key in folders) else 'game'
+
+
+def deck_hint(settings):
+    """On a Steam Deck with a game folder chosen and no Steam entry written yet: what to do next."""
+    if not is_steam_deck() or first_page(settings) == 'game' or settings.get('steam_added'):
+        return ''
+    return _('Next: Add to Steam, then play from Gaming Mode.')
 
 
 def window_title():
@@ -718,7 +732,7 @@ class Launcher:
         self.load_fonts()
         self.style()
         self.build()
-        self.show('play')
+        self.show(first_page(self.app))
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.after(100, self.drain_output)
         root.after(150, self.detect_controller)
@@ -1179,7 +1193,8 @@ class Launcher:
             self.nav[name], self.nav_pills[name], self.nav_marks[name] = item, pill, mark
         tk.Frame(side, bg=BG).pack(fill='both', expand=True)
         self.side = side
-        self.side_note = tk.Label(side, text=_('Native port: the original PS4 game code runs directly on Windows.'),
+        self.side_note = tk.Label(side, text=_('Native port: the original PS4 game code runs directly on Linux.')
+                                  if IS_LINUX else _('Native port: the original PS4 game code runs directly on Windows.'),
                                   bg=BG, fg=MUTED, font=('Segoe UI', 9), justify='left',
                                   wraplength=side_w - 36)
         self.side_note.pack(anchor='w', padx=18, pady=(0, 18))
@@ -1308,6 +1323,9 @@ class Launcher:
         if not IS_LINUX:  # a Windows .lnk; on Linux Add to Steam is the way in
             self.pill(row, _('Desktop shortcut'), self.shortcut, background=SURFACE, padding=(14, 6)).pack(
                 side='left', anchor='n', padx=(self.px(8), 0))
+        self.hint = tk.Label(shell, text=deck_hint(self.app), bg=SURFACE, fg=GOLD, font=self.font_ui,
+                             anchor='w', justify='left')
+        self.hint.pack(anchor='w', padx=self.px(22), pady=(0, self.px(8)))
         self.ready = tk.Label(shell, text='', bg=SURFACE, fg=MUTED, font=self.font_ui_sm,
                               wraplength=self.px(820), justify='left')
         self.ready.pack(anchor='w', padx=self.px(22), pady=(0, self.px(16)))
@@ -2647,6 +2665,10 @@ class Launcher:
         except (OSError, ValueError) as error:
             self.messagebox.showerror(NAME, _('Could not add the games to Steam: {}').format(error))
             return
+        self.app['steam_added'] = True
+        self.collect()
+        if getattr(self, 'hint', None):
+            self.hint.configure(text='')
         if restart:
             open_target('steam://open/games')
         if kind == 'games':
