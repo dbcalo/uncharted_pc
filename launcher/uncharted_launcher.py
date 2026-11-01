@@ -259,6 +259,11 @@ def is_steam_deck(dmi=Path('/sys/devices/virtual/dmi/id')):
     return vendor == 'Valve' and product in ('Jupiter', 'Galileo')
 
 
+def window_title():
+    system = ('Steam Deck' if is_steam_deck() else 'Linux') if IS_LINUX else 'Windows'
+    return f'{NAME} — The Nathan Drake Collection for {system} · by {AUTHOR}'
+
+
 def app_defaults():
     """The settings a player has not changed: the Deck's on a Steam Deck."""
     return {**APP_DEFAULTS, **DECK_DEFAULTS} if is_steam_deck() else dict(APP_DEFAULTS)
@@ -704,7 +709,7 @@ class Launcher:
         self.card_hot = None
         self.info, self.available = None, {}
         self.update_box = None
-        root.title(f'{NAME} — The Nathan Drake Collection for Windows · by {AUTHOR}')
+        root.title(window_title())
         root.configure(bg=BG)
         self.dpi = root.winfo_fpixels('1i') / 96.0
         root.geometry(f'{self.px(1180)}x{self.px(860)}')

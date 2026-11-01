@@ -40,6 +40,15 @@ class Detection(unittest.TestCase):
         with mock.patch.object(launcher, 'is_steam_deck', return_value=False):
             self.assertEqual(launcher.app_defaults(), launcher.APP_DEFAULTS)
 
+    def test_window_title(self):
+        with mock.patch.object(launcher, 'IS_LINUX', False):
+            self.assertIn('The Nathan Drake Collection for Windows', launcher.window_title())
+        with mock.patch.object(launcher, 'IS_LINUX', True):
+            with mock.patch.object(launcher, 'is_steam_deck', return_value=True):
+                self.assertIn('The Nathan Drake Collection for Steam Deck', launcher.window_title())
+            with mock.patch.object(launcher, 'is_steam_deck', return_value=False):
+                self.assertIn('The Nathan Drake Collection for Linux', launcher.window_title())
+
 
 class DeckDefaults(unittest.TestCase):
     def setUp(self):
