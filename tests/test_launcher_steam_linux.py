@@ -92,6 +92,7 @@ class SteamOnLinux(unittest.TestCase):
                 mock.patch.object(launcher.subprocess, 'Popen') as popen, \
                 mock.patch.object(launcher.time, 'sleep'), \
                 mock.patch.object(launcher, 'open_target') as open_target, \
+                mock.patch.object(launcher, 'write_control_layout'), \
                 mock.patch.object(launcher, 'add_steam_collection') as add:
             launcher.Launcher.write_to_steam(ui, 'collection')
         popen.assert_called_once()

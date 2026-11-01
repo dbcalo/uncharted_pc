@@ -2637,6 +2637,8 @@ class Launcher:
                     add_steam_games(config)
                 else:
                     add_steam_collection(config, self.app)
+                write_control_layout(steam, config, list(STEAM_TITLES.values()) if kind == 'games'
+                                     else [COLLECTION_TITLE])
         except (OSError, ValueError) as error:
             self.messagebox.showerror(NAME, _('Could not add the games to Steam: {}').format(error))
             return
@@ -2857,6 +2859,34 @@ def add_steam_collection(config, settings, now=None):
     except Exception:  # pictures are a nicety: the shortcut works without them
         pass
     return exe, result
+
+
+# Steam Input layout for a Steam Deck (launcher/steamdeck): Steam's Gamepad template with gyro to
+# mouse as Ben set it up for the DualSense (2.7x, Dots Per 360 2400, Player Space, his gyro button).
+DECK_LAYOUT = Path(__file__).resolve().parent / 'steamdeck' / 'controller_neptune.vdf'
+
+
+def layout_folder(steam, config, name):
+    """Where Steam keeps one account's (userdata/<id>/config) layouts for a non-Steam entry: its
+    name in lower case."""
+    return (Path(steam) / 'steamapps' / 'common' / 'Steam Controller Configs' / Path(config).parent.name
+            / 'config' / name.lower())
+
+
+def write_control_layout(steam, config, names):
+    """The Deck layout for each Steam entry name (Linux only), where Steam finds it the first time
+    the entry starts. A layout already there (the player's own) is kept. Returns the files written."""
+    if not IS_LINUX:
+        return []
+    written = []
+    for name in names:
+        path = layout_folder(steam, config, name) / 'controller_neptune.vdf'
+        if path.exists():
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(DECK_LAYOUT, path)
+        written.append(path)
+    return written
 
 
 def play_request(args):
