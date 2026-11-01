@@ -1,6 +1,8 @@
-# Packaged port: the prebuilt game binaries (build.sh first), the start-up scripts and the GTK4
-# launcher, with their whole Nix closure and Mesa's Vulkan drivers. `bash packaging/appimage.sh`
-# turns it into an AppImage (Steam Deck); `nix-build packaging` alone gives result/bin/bbport.
+# Packaged port: the prebuilt game binaries (build.sh first), the start-up scripts and the
+# Uncharted launcher (Tk), with their whole Nix closure and Mesa's Vulkan drivers.
+# `bash packaging/appimage.sh` turns it into an AppImage (Steam Deck); `nix-build packaging` alone
+# gives result/bin/uncharted. Without --play it opens the launcher; with --play [u1|u2|u3] (the
+# Steam entries the launcher writes) it starts the game.
 { pkgs ? import <nixpkgs> { }
   # Store paths the prebuilt binaries load libraries from (their RUNPATHs), written by
   # appimage.sh. Nix only finds references to its inputs, and the binaries were built outside.
@@ -25,7 +27,7 @@ let
       in builtins.elem rel wanted
         || lib.any (dir: lib.hasPrefix (dir + "/") rel) assetDirs;
   };
-  python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
+  python = pkgs.python3.withPackages (ps: [ ps.tkinter ps.pillow ]);
   # Mesa comes with the package. bbport_vulkan.py adds the host NVIDIA ICD and
   # only its vendor libraries (matching the host's kernel module).
   icds = lib.concatMapStringsSep ":" (name: "${pkgs.mesa}/share/vulkan/icd.d/${name}")
@@ -39,6 +41,7 @@ let
     <fontconfig>
       <dir>${pkgs.dejavu_fonts}/share/fonts</dir>
       <dir>${pkgs.adwaita-fonts}/share/fonts</dir>
+      <dir>${root + "/launcher/fonts"}</dir>
       <dir>/usr/share/fonts</dir>
       <dir>/usr/local/share/fonts</dir>
       <dir prefix="xdg">fonts</dir>
@@ -101,28 +104,19 @@ pkgs.stdenv.mkDerivation {
     runHook postInstall
   '';
   postFixup = ''
-    # bin/bbport is a static program (bbport-entry.c) that clears the host's LD_PRELOAD (Steam's
+    # bin/uncharted is a static program (bbport-entry.c) that clears the host's LD_PRELOAD (Steam's
     # overlay) and similar before the wrapper's own dynamic programs start.
     mkdir -p $out/libexec
-    gcc -O2 -Wall -Werror -static -L${pkgs.glibc.static}/lib -DTARGET="\"$out/libexec/bbport\"" \
-      ${./bbport-entry.c} -o $out/bin/bbport
-    makeShellWrapper ${python}/bin/python3 $out/libexec/bbport \
+    gcc -O2 -Wall -Werror -static -L${pkgs.glibc.static}/lib -DTARGET="\"$out/libexec/uncharted\"" \
+      ${./bbport-entry.c} -o $out/bin/uncharted
+    makeShellWrapper ${python}/bin/python3 $out/libexec/uncharted \
       "''${gappsWrapperArgs[@]}" \
-      ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${python}/bin/python3 $out/share/bbport/launcher/bbport_launcher.py" \
+      ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${python}/bin/python3 $out/share/bbport/launcher/uncharted_launcher.py" \
       --set BB_PREBUILT 1 \
       --set PYTHON ${pkgs.python3}/bin/python3 \
       --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
       --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.util-linux ]} \
       --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
-    # The game alone, without the launcher (settings from the data directory's bbport.ini).
-    makeShellWrapper ${pkgs.python3}/bin/python3 $out/bin/bbport-game \
-      ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${pkgs.bash}/bin/bash $out/share/bbport/run.sh" \
-      --set BB_PREBUILT 1 \
-      --set PYTHON ${pkgs.python3}/bin/python3 \
-      --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
-      --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils ]} \
-      --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
   '';
-  # BB_APPIMAGE_GAME=1: the AppImage starts the game (run.sh) instead of the launcher.
-  meta.mainProgram = if builtins.getEnv "BB_APPIMAGE_GAME" == "1" then "bbport-game" else "bbport";
+  meta.mainProgram = "uncharted";
 }
