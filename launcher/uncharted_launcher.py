@@ -260,6 +260,12 @@ def is_steam_deck(dmi=Path('/sys/devices/virtual/dmi/id')):
     return vendor == 'Valve' and product in ('Jupiter', 'Galileo')
 
 
+def browse_start(current):
+    """Where Browse opens: the chosen folder, else the port folder; on Linux the home folder, as the
+    AppImage's own folder is a temporary /nix/store path."""
+    return current or (str(Path.home()) if IS_LINUX else str(PORT_DIR))
+
+
 def first_page(settings):
     """The page the launcher opens on: the game folder until one is chosen, then Play."""
     folders = ('game_dir', 'game_dir_u1', 'game_dir_u2', 'game_dir_u3')
@@ -836,8 +842,14 @@ class Launcher:
         s.configure('TEntry', foreground=TEXT, insertcolor=TEXT, padding=(8, 5), fieldbackground=CARD_HI,
                     bordercolor=CARD_HI, lightcolor=CARD_HI, darkcolor=CARD_HI)
         s.map('TEntry', bordercolor=[('focus', GOLD_DIM)], lightcolor=[('focus', GOLD_DIM)])
-        # Tk's own folder picker on Linux draws its file list in Treeview's colours (clam: white).
+        # Tk's own folder picker on Linux draws its file list in Treeview's colours (clam: white), the
+        # chosen folder in the entry's selection colours, and its folder path as a menu button and menu.
         s.configure('Treeview', background=CARD, foreground=TEXT, fieldbackground=CARD)
+        s.configure('TEntry', selectbackground=GOLD, selectforeground='#1a1408')
+        s.map('TMenubutton', background=[('active', CARD_HI)])
+        for option, colour in (('background', CARD), ('foreground', TEXT), ('activeBackground', CARD_HI),
+                               ('activeForeground', TEXT)):
+            self.root.option_add(f'*Menu.{option}', colour)
         s.configure('TButton', background='#221f1a', foreground=TEXT, padding=(14, 7), borderwidth=0)
         s.map('TButton', background=[('active', '#322c24'), ('disabled', PANEL)], foreground=[('disabled', MUTED)])
         s.configure('Play.TButton', background=GOLD, foreground='#1a1408', font=('Segoe UI', 13, 'bold'),
@@ -847,6 +859,9 @@ class Launcher:
         s.configure('Vertical.TScrollbar', background='#30251a', arrowcolor=MUTED, troughcolor=SURFACE,
                     bordercolor=SURFACE, lightcolor='#30251a', darkcolor='#30251a', gripcount=0, arrowsize=12)
         s.map('Vertical.TScrollbar', background=[('active', '#463624')])
+        s.configure('Horizontal.TScrollbar', background='#30251a', arrowcolor=MUTED, troughcolor=SURFACE,
+                    bordercolor=SURFACE, lightcolor='#30251a', darkcolor='#30251a', gripcount=0, arrowsize=12)
+        s.map('Horizontal.TScrollbar', background=[('active', '#463624')])
 
     # ---- widget helpers ----------------------------------------------------------------------
     def var(self, key):
@@ -946,7 +961,7 @@ class Launcher:
         self.ttk.Entry(holder, textvariable=var, width=54).pack(side='left')
 
         def browse():
-            chosen = self.filedialog.askdirectory(title=prompt, initialdir=var.get() or str(PORT_DIR))
+            chosen = self.filedialog.askdirectory(title=prompt, initialdir=browse_start(var.get()))
             if chosen:
                 var.set(str(Path(chosen)))
         self.pill(holder, _('Browse…'), browse, padding=(14, 6)).pack(side='left', padx=(8, 0))
@@ -959,7 +974,7 @@ class Launcher:
     def image_path(self, title, current=''):
         """Choose and validate a local image."""
         chosen = self.filedialog.askopenfilename(
-            title=title, initialdir=str(Path(current).parent) if current else str(PORT_DIR),
+            title=title, initialdir=browse_start(str(Path(current).parent) if current else ''),
             filetypes=[(_('Image files'), '*.png *.jpg *.jpeg *.webp *.ico'), (_('All files'), '*.*')])
         if not chosen:
             return ''
