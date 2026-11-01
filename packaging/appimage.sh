@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds dist/Bloodborne-bbport-x86_64.AppImage: the port's current build (run build.sh first),
+# Builds dist/Uncharted-The-Nathan-Drake-Collection-x86_64.AppImage: the port's current build (run build.sh first),
 # its scripts and the launcher, bundled with their Nix closure (nix-appimage: the AppImage mounts
 # its /nix/store with user namespaces, available on SteamOS and most desktops).
 # Running it opens the launcher; `--play` starts the game with the launcher's saved settings.
@@ -22,6 +22,6 @@ trap 'rm -rf "$work"' EXIT
 (cd "$work" && nix bundle --impure --bundler github:ralismark/nix-appimage/7946addbc0d97e358a6d7aefe5e82310f0fe6b18 \
     --expr "import $root/packaging {}")
 mkdir -p dist
-# Named after the package's main program (uncharted.AppImage).
-install -m755 "$work"/*.AppImage dist/Bloodborne-bbport-x86_64.AppImage
-ls -lh dist/Bloodborne-bbport-x86_64.AppImage
+# The bundler names it after the main program (uncharted.AppImage); the collection's name instead.
+install -m755 "$work"/*.AppImage dist/Uncharted-The-Nathan-Drake-Collection-x86_64.AppImage
+ls -lh dist/Uncharted-The-Nathan-Drake-Collection-x86_64.AppImage

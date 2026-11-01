@@ -7,7 +7,7 @@ settings that suit the Deck, and how to add it to Steam.
 ## Get the AppImage
 
 - From CI: the **Steam Deck AppImage** workflow (`.github/workflows/steamdeck.yml`) uploads
-  `Uncharted-SteamDeck-x86_64.AppImage` as an artifact, and attaches it to tagged releases.
+  `Uncharted-The-Nathan-Drake-Collection-x86_64.AppImage` as an artifact, and attaches it to tagged releases.
 - Or build it: `nix-shell shell.nix --run "bash build.sh"`, `BB_FSR4_TIERS=1080 bash
   tools/fetch_fsr4_assets.sh`, then `BB_APPIMAGE_GAME=1 nix-shell shell.nix --run "bash
   packaging/appimage.sh"`. Nix can run in Docker (`nixos/nix`) on distributions without it.

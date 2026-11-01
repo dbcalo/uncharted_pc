@@ -4,7 +4,7 @@
 # or one game directly with u1/u2/u3 in the shortcut's launch options.
 # Set GAME_DIR to your decrypted dump (the folder with eboot.bin, big2-ps4_Shipping.elf, u1data, ...).
 GAME_DIR=${BB_GAME_DIR:-"$HOME/Games/CUSA02344"}
-APPIMAGE=${BB_APPIMAGE:-"$HOME/Applications/Uncharted-SteamDeck-x86_64.AppImage"}
+APPIMAGE=${BB_APPIMAGE:-"$HOME/Applications/Uncharted-The-Nathan-Drake-Collection-x86_64.AppImage"}
 
 # Steam preloads its overlay (it needs the host libGL, which the self-contained AppImage lacks) and
 # its runtime library path: both stop the AppImage before it starts. Steam Input does not need them.
