@@ -836,6 +836,8 @@ class Launcher:
         s.configure('TEntry', foreground=TEXT, insertcolor=TEXT, padding=(8, 5), fieldbackground=CARD_HI,
                     bordercolor=CARD_HI, lightcolor=CARD_HI, darkcolor=CARD_HI)
         s.map('TEntry', bordercolor=[('focus', GOLD_DIM)], lightcolor=[('focus', GOLD_DIM)])
+        # Tk's own folder picker on Linux draws its file list in Treeview's colours (clam: white).
+        s.configure('Treeview', background=CARD, foreground=TEXT, fieldbackground=CARD)
         s.configure('TButton', background='#221f1a', foreground=TEXT, padding=(14, 7), borderwidth=0)
         s.map('TButton', background=[('active', '#322c24'), ('disabled', PANEL)], foreground=[('disabled', MUTED)])
         s.configure('Play.TButton', background=GOLD, foreground='#1a1408', font=('Segoe UI', 13, 'bold'),
