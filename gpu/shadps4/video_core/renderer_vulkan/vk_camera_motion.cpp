@@ -250,6 +250,17 @@ bool CameraMotion::IsVelocityShader(u64 ps_hash) const noexcept {
 // steady clock).
 static std::atomic<float> shown_camera_yaw{0.0f};
 static std::atomic<double> shown_camera_time{0.0};
+static std::atomic<float> shown_camera_pos[3]{};
+
+extern "C" int bbgpu_camera_position(float* position) {
+    if (shown_camera_time.load(std::memory_order_acquire) == 0.0) {
+        return 0;
+    }
+    for (int i = 0; i < 3; ++i) {
+        position[i] = shown_camera_pos[i].load(std::memory_order_relaxed);
+    }
+    return 1;
+}
 
 extern "C" int bbgpu_camera_yaw(float* yaw_degrees, double* age_seconds) {
     const double t = shown_camera_time.load(std::memory_order_acquire);
@@ -295,6 +306,10 @@ void CameraMotion::OnVelocityConstants(const float* c, u32 dwords) {
                          std::chrono::steady_clock::now().time_since_epoch()).count();
     if (std::isfinite(fx) && std::isfinite(fz) && (fx != 0.0f || fz != 0.0f)) {
         shown_camera_yaw.store(std::atan2(fx, fz) * 57.29578f, std::memory_order_relaxed);
+        // the translation column of the view-to-world rows: the camera's position
+        shown_camera_pos[0].store(c[15], std::memory_order_relaxed);
+        shown_camera_pos[1].store(c[19], std::memory_order_relaxed);
+        shown_camera_pos[2].store(c[23], std::memory_order_relaxed);
         shown_camera_time.store(t, std::memory_order_release);
     }
     static const bool camera_log = std::getenv("BB_CAMERA_LOG") != nullptr;

@@ -1,4 +1,5 @@
 // bbport: SDL3 window for the Vulkan swapchain (X11 or Wayland).
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -205,6 +206,11 @@ bool WindowSDL::PollEvents() {
             continue;
         }
         // BB_TEXTURE_DUMP=1: F10 saves the textures of the next frame (user/texture_dump).
+        // F8 marks the log (a moment the player wants looked at, such as an aim that snapped).
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F8 && !event.key.repeat) {
+            std::printf("Marked by the player (F8) at %.3f s\n", SDL_GetTicksNS() * 1e-9);
+            std::fflush(stdout);
+        }
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F10 && !event.key.repeat) {
             Vulkan::FrameCapture::ArmTextureDump();
         }
