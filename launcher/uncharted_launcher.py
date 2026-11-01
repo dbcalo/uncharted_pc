@@ -485,6 +485,22 @@ def game_available(s, key):
     return (Path(folder) / exe).is_file() or bool(own and (Path(folder) / 'eboot.bin').is_file())
 
 
+def game_folder_near(chosen):
+    """The folder with a game's executable when a pick is one level off: the dump's parent folder (one
+    dump below it) or a folder inside the dump. Otherwise the pick as it is."""
+    def has_game(folder):
+        return any((folder / exe).is_file() for *_rest, exe in GAMES)
+    path = Path(chosen)
+    if not path.is_dir() or has_game(path):
+        return chosen
+    below = [child for child in path.iterdir() if child.is_dir() and has_game(child)]
+    if len(below) == 1:
+        return str(below[0])
+    if not below and has_game(path.parent):
+        return str(path.parent)
+    return chosen
+
+
 def mouse_sensitivity(s):
     """The saved sensitivity as the game reads it: a number in the slider's range."""
     try:
@@ -963,7 +979,7 @@ class Launcher:
         def browse():
             chosen = self.filedialog.askdirectory(title=prompt, initialdir=browse_start(var.get()))
             if chosen:
-                var.set(str(Path(chosen)))
+                var.set(str(Path(game_folder_near(chosen) if key.startswith('game_dir') else chosen)))
         self.pill(holder, _('Browse…'), browse, padding=(14, 6)).pack(side='left', padx=(8, 0))
         self.pill(holder, _('Open'), lambda: self.open_path(var.get(), key), kind='ghost',
                   padding=(12, 6)).pack(side='left', padx=(4, 0))
@@ -2217,7 +2233,9 @@ class Launcher:
             self.show('game')
             return
         if not game_available(self.app, self.app['start']):
-            self.messagebox.showerror(NAME, _('This game is not in the chosen folder.'))
+            exe = next(e for k, _t, _s, e in GAMES if k == self.app['start'])
+            self.messagebox.showerror(NAME, _('This game is not in the chosen folder.') + '\n\n'
+                                      + _('{file} was not found in {folder}').format(file=exe, folder=folder))
             return
         self.set_log('')
         try:
