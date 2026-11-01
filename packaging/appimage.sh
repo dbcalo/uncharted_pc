@@ -18,7 +18,8 @@ root=$PWD
 } > packaging/runtime-paths.nix
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-(cd "$work" && nix bundle --impure --bundler github:ralismark/nix-appimage \
+# The bundler at a reviewed commit (2025-09-15), not whatever its main branch holds today.
+(cd "$work" && nix bundle --impure --bundler github:ralismark/nix-appimage/7946addbc0d97e358a6d7aefe5e82310f0fe6b18 \
     --expr "import $root/packaging {}")
 mkdir -p dist
 # Named after the package's main program: bbport.AppImage, or bbport-game.AppImage with BB_APPIMAGE_GAME=1.
