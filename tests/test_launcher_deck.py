@@ -36,6 +36,13 @@ class Detection(unittest.TestCase):
         with mock.patch.object(launcher, 'IS_LINUX', False):  # never on Windows
             self.assertFalse(launcher.is_steam_deck(dmi(self.root / 'win', 'Valve', 'Galileo')))
 
+    def test_deck_screen_size(self):
+        with mock.patch.object(launcher, 'IS_LINUX', True):
+            with mock.patch.object(launcher, 'is_steam_deck', return_value=True):
+                self.assertEqual(launcher.screen_size(), (1280, 800))
+            with mock.patch.object(launcher, 'is_steam_deck', return_value=False):
+                self.assertIsNone(launcher.screen_size())
+
     def test_defaults_off_a_deck(self):
         with mock.patch.object(launcher, 'is_steam_deck', return_value=False):
             self.assertEqual(launcher.app_defaults(), launcher.APP_DEFAULTS)
@@ -84,6 +91,23 @@ class DeckDefaults(unittest.TestCase):
 
     def test_saved_value_wins(self):
         self.assertEqual(self.environment({'frame_rate': '60'})['BB_VBLANK_HZ'], '60')
+
+    def test_deck_without_a_screen_size(self):
+        # As it ran on the Deck: Linux reports no screen size, so fullscreen falls back to the window
+        # size (1280x800), not to 16:9 (1422x800, which the game's width check rejects).
+        settings = {**launcher.app_defaults(), 'game_dir': self.folder.name}
+        with mock.patch.object(launcher, 'screen_size', return_value=None):
+            self.assertEqual(launcher.game_environment(settings)['BB_GAME_RES'], '1280x800')
+
+    def test_widths_are_multiples_of_16(self):
+        # The games assert displaySize.m_w % 16 == 0 (post-shading-win.cpp)
+        for height, _label in launcher.RENDER_HEIGHTS:
+            for aspect in ('16:9', '21:9', '32:9', 'window'):
+                for window in ('1280x800', '1366x768', '1920x1080', '3440x1440'):
+                    size = launcher.game_resolution({'render_height': height, 'aspect': aspect,
+                                                     'fullscreen': False, 'window_size': window})
+                    width = int((size or '1920x1080').split('x')[0])
+                    self.assertEqual(width % 16, 0, (height, aspect, window, size))
 
     def test_render_800(self):
         self.assertEqual(launcher.game_resolution(
