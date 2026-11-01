@@ -2521,6 +2521,16 @@ def play_problem(settings, key):
     return None
 
 
+def play_environment(settings, start=None):
+    """The game's environment for --play: with a game named, BB_START_GAME takes Uncharted 1
+    past the collection's menu (it shares eboot.bin with it; U2 and U3 start on their own)."""
+    env = game_environment(settings, start)
+    env.pop('BB_START_GAME', None)
+    if start:
+        env['BB_START_GAME'] = start
+    return env
+
+
 def play_without_window(settings, start=None):
     """--play: the game with the saved settings (shortcuts, Steam); output to the console when
     there is one and to <saves folder>/last_run.log."""
@@ -2528,7 +2538,7 @@ def play_without_window(settings, start=None):
     log_dir = Path(settings.get('user_dir') or DATA_DIR / 'user')
     with open_run_log(log_dir) as log:
         try:
-            env = game_environment(settings, start)
+            env = play_environment(settings, start)
         except OSError as error:
             text = _('Could not save the input configuration: {}').format(error) + '\n'
             log.write(text)
