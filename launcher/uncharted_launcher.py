@@ -88,7 +88,7 @@ WINDOW_SIZES = [('1280x720', '1280 × 720'), ('1600x900', '1600 × 900'),
 # The size the games themselves render and show (BB_GAME_RES: run.py, src/runtime_display.c): a real
 # higher resolution, not an enlarged 1080p picture. The height here and the shape below make the
 # width; the games keep their memory for it, so the sizes stop where it runs out.
-RENDER_HEIGHTS = [('1080', "1080p (the games' own)"), ('1440', '1440p'), ('1620', '1620p'), ('2160', '2160p (4K)')]
+RENDER_HEIGHTS = [('800', '800p (Steam Deck)'), ('1080', "1080p (the games' own)"), ('1440', '1440p'), ('1620', '1620p'), ('2160', '2160p (4K)')]
 ASPECTS = [('16:9', "16:9 (the games' own)"), ('21:9', '21:9 ultrawide'), ('32:9', '32:9 super ultrawide'),
            ('window', "The shape of the window or screen")]
 ASPECT_RATIOS = {'16:9': 16 / 9, '21:9': 64 / 27, '32:9': 32 / 9}
@@ -237,6 +237,31 @@ APP_DEFAULTS = {'game_dir': '', 'game_dir_u1': '', 'game_dir_u2': '', 'game_dir_
                 'gyro_rotate': '0.00', 'art_banner': '', 'art_u1': '', 'art_u2': '', 'art_u3': '', 'steam_art': '', 'art_crops': {}, 'shortcut_name': 'Uncharted: The Nathan Drake Collection', 'shortcut_icon': '', 'steam_entries': 'collection', 'trophy_game': 'u1', 'pad_vibration': True, 'pad_vibration_strength': '100', 'button_prompts': 'auto', 'key_bindings': {}, 'pad_bindings': {}, 'check_updates': True,
                 **{key: 'auto' for key in FIXES},
                 **{f'{game}_infinite_{cheat}': False for game, _t, _s, _e in GAMES for cheat in ('health', 'ammo')}}
+
+# A Steam Deck's own defaults (PR 734's measured Deck settings, docs/STEAM_DECK.md): its 1280x800
+# screen in full, 120 Hz game timing (a late frame waits 8 ms more instead of 16), no AA or frame
+# generation. Steam does the gyro there (Steam Input), so its aiming fix is on and the built-in gyro off.
+DECK_DEFAULTS = {'fullscreen': True, 'present_mode': 'Mailbox', 'frame_rate': '120', 'window_size': '1280x800',
+                 'render_height': '800', 'aspect': 'window', 'scaler': 'fsr1', 'sharpening': '500',
+                 'anti_aliasing': 'off', 'frame_generation': 'off', 'button_prompts': 'auto',
+                 'fix_job_sleep': 'on', 'gyro_aim': True, 'gyro_builtin': False}
+
+
+def is_steam_deck(dmi=Path('/sys/devices/virtual/dmi/id')):
+    """A Steam Deck: Valve's board, LCD (Jupiter) or OLED (Galileo)."""
+    if not IS_LINUX:
+        return False
+    try:
+        vendor = (dmi / 'board_vendor').read_text().strip()
+        product = (dmi / 'product_name').read_text().strip()
+    except OSError:
+        return False
+    return vendor == 'Valve' and product in ('Jupiter', 'Galileo')
+
+
+def app_defaults():
+    """The settings a player has not changed: the Deck's on a Steam Deck."""
+    return {**APP_DEFAULTS, **DECK_DEFAULTS} if is_steam_deck() else dict(APP_DEFAULTS)
 
 
 UI_LANGUAGE = 'en'
@@ -582,7 +607,7 @@ def game_resolution(s, screen=None):
     else:
         ratio = ASPECT_RATIOS.get(shape, 16 / 9)
     ratio = min(max(ratio, 1.0), 4.0)
-    for height in sorted({height, 2160, 1800, 1620, 1440, 1260, 1080, 900, 720}, reverse=True):
+    for height in sorted({height, 2160, 1800, 1620, 1440, 1260, 1080, 900, 800, 720}, reverse=True):
         if height > int(s.get('render_height') or 1080) if str(s.get('render_height') or '1080').isdigit() else height > 1080:
             continue
         width = SCREEN_WIDTHS.get((shape, height)) or int(round(height * ratio / 2)) * 2
@@ -667,7 +692,7 @@ class Launcher:
         global UI_LANGUAGE
         self.tk, self.ttk, self.filedialog, self.messagebox = tk, ttk, filedialog, messagebox
         self.root = root
-        self.app = {**APP_DEFAULTS, **load_json(CONFIG_FILE, {}), **gyro_from_ini()}
+        self.app = {**app_defaults(), **load_json(CONFIG_FILE, {}), **gyro_from_ini()}
         UI_LANGUAGE = uncharted_i18n.language_code(self.app.get('ui_language', ''))
         self.configure_art()
         self.vars = {}
@@ -2925,7 +2950,7 @@ def main():
         sys.exit(install_update(args[1], args[2]))
     if FROZEN and UPDATE_DIR not in PORT_DIR.parents:
         shutil.rmtree(UPDATE_DIR, ignore_errors=True)  # what a finished update left behind
-    settings = {**APP_DEFAULTS, **load_json(CONFIG_FILE, {})}
+    settings = {**app_defaults(), **load_json(CONFIG_FILE, {})}
     play = play_request(args)
     if play:  # --play u1|u2|u3: that game, or a message (never another game)
         problem = play_problem(settings, play)
