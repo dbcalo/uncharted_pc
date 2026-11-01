@@ -377,3 +377,60 @@ for _code, _translations in EXTRA_TRANSLATIONS.items():
 
 def translate(language, text):
     return TRANSLATIONS.get(language, {}).get(text, text)
+
+
+# The texts of --play u1|u2|u3 and the per-game Steam entries, kept apart from the tables above so
+# their updates merge without conflicts.
+PLAY_TRANSLATIONS = {
+    'es': {
+        'Could not add the games to Steam: {}': 'No se pudieron añadir los juegos a Steam: {}',
+        'Uncharted 1, 2 and 3 are in your Steam library. Each starts with the settings saved in this launcher.':
+        'Uncharted 1, 2 y 3 están en tu biblioteca de Steam. Cada uno se inicia con los ajustes guardados en este launcher.',
+        'Unknown game "{}". Use --play u1, u2 or u3.': 'Juego desconocido "{}". Usa --play u1, u2 o u3.',
+        '{} is not available: open the launcher and choose its game folder.':
+        '{} no está disponible: abre el launcher y elige su carpeta del juego.',
+    },
+    'pt': {
+        'Could not add the games to Steam: {}': 'Não foi possível adicionar os jogos à Steam: {}',
+        'Uncharted 1, 2 and 3 are in your Steam library. Each starts with the settings saved in this launcher.':
+        'Uncharted 1, 2 e 3 estão na sua biblioteca da Steam. Cada um inicia com as configurações salvas neste launcher.',
+        'Unknown game "{}". Use --play u1, u2 or u3.': 'Jogo desconhecido "{}". Use --play u1, u2 ou u3.',
+        '{} is not available: open the launcher and choose its game folder.':
+        '{} não está disponível: abra o launcher e escolha a pasta do jogo.',
+    },
+    'fr': {
+        'Could not add the games to Steam: {}': "Impossible d'ajouter les jeux à Steam : {}",
+        'Uncharted 1, 2 and 3 are in your Steam library. Each starts with the settings saved in this launcher.':
+        'Uncharted 1, 2 et 3 sont dans votre bibliothèque Steam. Chacun démarre avec les réglages enregistrés dans ce launcher.',
+        'Unknown game "{}". Use --play u1, u2 or u3.': 'Jeu inconnu « {} ». Utilisez --play u1, u2 ou u3.',
+        '{} is not available: open the launcher and choose its game folder.':
+        "{} n'est pas disponible : ouvrez le launcher et choisissez son dossier de jeu.",
+    },
+    'de': {
+        'Could not add the games to Steam: {}': 'Die Spiele konnten nicht zu Steam hinzugefügt werden: {}',
+        'Uncharted 1, 2 and 3 are in your Steam library. Each starts with the settings saved in this launcher.':
+        'Uncharted 1, 2 und 3 sind in deiner Steam-Bibliothek. Jedes startet mit den in diesem Launcher gespeicherten Einstellungen.',
+        'Unknown game "{}". Use --play u1, u2 or u3.': 'Unbekanntes Spiel „{}“. Verwende --play u1, u2 oder u3.',
+        '{} is not available: open the launcher and choose its game folder.':
+        '{} ist nicht verfügbar: Öffne den Launcher und wähle seinen Spielordner.',
+    },
+    'it': {
+        'Could not add the games to Steam: {}': 'Impossibile aggiungere i giochi a Steam: {}',
+        'Uncharted 1, 2 and 3 are in your Steam library. Each starts with the settings saved in this launcher.':
+        'Uncharted 1, 2 e 3 sono nella tua libreria di Steam. Ognuno si avvia con le impostazioni salvate in questo launcher.',
+        'Unknown game "{}". Use --play u1, u2 or u3.': 'Gioco sconosciuto "{}". Usa --play u1, u2 o u3.',
+        '{} is not available: open the launcher and choose its game folder.':
+        '{} non è disponibile: apri il launcher e scegli la sua cartella del gioco.',
+    },
+    'ja': {
+        'Could not add the games to Steam: {}': 'ゲームを Steam に追加できませんでした: {}',
+        'Uncharted 1, 2 and 3 are in your Steam library. Each starts with the settings saved in this launcher.':
+        'Uncharted 1、2、3 を Steam ライブラリに追加しました。それぞれこのランチャーに保存された設定で起動します。',
+        'Unknown game "{}". Use --play u1, u2 or u3.': '不明なゲーム「{}」です。--play u1、u2、u3 のいずれかを使ってください。',
+        '{} is not available: open the launcher and choose its game folder.':
+        '{} は利用できません: ランチャーを開いてゲームフォルダーを選んでください。',
+    },
+}
+
+for _code, _translations in PLAY_TRANSLATIONS.items():
+    TRANSLATIONS[_code].update(_translations)
