@@ -9,20 +9,22 @@ settings that suit the Deck, and how to add it to Steam.
 - From CI: the **Steam Deck AppImage** workflow (`.github/workflows/steamdeck.yml`) uploads
   `Uncharted-The-Nathan-Drake-Collection-x86_64.AppImage` as an artifact, and attaches it to tagged releases.
 - Or build it: `nix-shell shell.nix --run "bash build.sh"`, `BB_FSR4_TIERS=1080 bash
-  tools/fetch_fsr4_assets.sh`, then `BB_APPIMAGE_GAME=1 nix-shell shell.nix --run "bash
-  packaging/appimage.sh"`. Nix can run in Docker (`nixos/nix`) on distributions without it.
-  `BB_APPIMAGE_GAME=1` makes the AppImage start the game (`run.sh`) instead of the GTK launcher.
+  tools/fetch_fsr4_assets.sh`, then `nix-shell shell.nix --run "bash packaging/appimage.sh"`.
+  Nix can run in Docker (`nixos/nix`) on distributions without it.
 
 ## Add it to Steam
 
-1. In Desktop Mode, copy the AppImage to `~/Applications/` and `packaging/steamdeck/play.sh` to
-   somewhere like `~/Games/Uncharted/`. Set `GAME_DIR` at its top to your dump.
-2. Add `play.sh` as a non-Steam game, or point an existing shortcut's *Target* at it.
-   Leave *Force the use of a specific Steam Play compatibility tool* off: it is a Linux program.
-3. Launch options: empty for the collection menu, or `u1`, `u2`, `u3` for one game.
+1. In Desktop Mode, put the AppImage where it will stay and double-click it. The Uncharted
+   launcher opens on the Game page: choose the folder of your dump.
+2. On the Play page, **Add to Steam** (one entry for the collection, or one per game). Steam closes
+   while the entries are written and opens again. Each entry starts the AppImage with `--play`, and
+   comes with a Steam Deck controller layout (launcher/steamdeck: gamepad, gyro to mouse while the
+   gyro button is held); a layout you saved for that entry yourself is kept.
+3. Play from Gaming Mode. On a Steam Deck the launcher's defaults are the settings below; open the
+   AppImage again in Desktop Mode to change anything. Moved the AppImage? Add to Steam again.
 
-Steam Input reaches the game ("gamepad connected" in `~/.local/share/uncharted-native/last_run.log`).
-`play.sh` clears `LD_PRELOAD` and `LD_LIBRARY_PATH` first: Steam's overlay library needs the host
+Steam Input reaches the game ("gamepad connected" in `last_run.log`). The AppImage's entry program
+clears `LD_PRELOAD` and `LD_LIBRARY_PATH` first: Steam's overlay library needs the host
 `libGL.so.1`, which the AppImage's own closure does not contain, and the AppImage would stop
 before the game starts. The Steam overlay is therefore not shown; the quick access menu works.
 

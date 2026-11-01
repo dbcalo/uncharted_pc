@@ -1,6 +1,6 @@
-# Steam Deck version: the native Linux build packaged as an AppImage that starts the game directly
-# (BB_APPIMAGE_GAME=1, packaging/default.nix), with its whole Nix closure so it runs on SteamOS
-# without extra packages. docs/STEAM_DECK.md shows how to add it to Steam.
+# Steam Deck version: the native Linux build packaged as an AppImage that opens the Uncharted
+# launcher (packaging/default.nix; --play starts the game), with its whole Nix closure so it runs on
+# SteamOS without extra packages. docs/STEAM_DECK.md shows how to add it to Steam.
 # Tags (v*) attach it to their GitHub release.
 name: Steam Deck AppImage
 
@@ -20,7 +20,6 @@ jobs:
     env:
       NIX_PATH: nixpkgs=channel:nixos-unstable
       BB_PGO: 'off'
-      BB_APPIMAGE_GAME: '1'
     steps:
       - uses: actions/checkout@v4
         with:
