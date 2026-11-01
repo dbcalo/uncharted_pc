@@ -619,8 +619,8 @@ def write_input_ini(s):
 
 def screen_size():
     """(width, height) of the main display in pixels, or None."""
-    if IS_LINUX:  # the game takes the screen's size in fullscreen
-        return None
+    if IS_LINUX:  # a Steam Deck's own screen (LCD and OLED); elsewhere the game takes the screen's size
+        return (1280, 800) if is_steam_deck() else None
     try:
         user32 = ctypes.windll.user32
         return int(user32.GetSystemMetrics(0)), int(user32.GetSystemMetrics(1))
@@ -637,13 +637,14 @@ def parse_size(text):
 
 
 def game_resolution(s, screen=None):
-    """The size the games render at, 'WxH' (even numbers, the pixel count within what their GPU memory holds), or ''
-    for their own 1920x1080."""
+    """The size the games render at, 'WxH' (the width a multiple of 16, which the games assert; the pixel count
+    within what their GPU memory holds), or '' for their own 1920x1080."""
     height = int(s.get('render_height') or 1080) if str(s.get('render_height') or '1080').isdigit() else 1080
     shape = s.get('aspect') or '16:9'
     if shape == 'window':
         size = screen if s.get('fullscreen') else parse_size(s.get('window_size'))
-        size = size or screen or (1920, 1080)
+        # no screen size (Linux): fullscreen takes the window size, the Deck's 1280x800 there
+        size = size or parse_size(s.get('window_size')) or screen or (1920, 1080)
         ratio = size[0] / size[1]
     else:
         ratio = ASPECT_RATIOS.get(shape, 16 / 9)
@@ -651,7 +652,7 @@ def game_resolution(s, screen=None):
     for height in sorted({height, 2160, 1800, 1620, 1440, 1260, 1080, 900, 800, 720}, reverse=True):
         if height > int(s.get('render_height') or 1080) if str(s.get('render_height') or '1080').isdigit() else height > 1080:
             continue
-        width = SCREEN_WIDTHS.get((shape, height)) or int(round(height * ratio / 2)) * 2
+        width = SCREEN_WIDTHS.get((shape, height)) or int(round(height * ratio / 16)) * 16
         if width * height <= MAX_RENDER_PIXELS:   # the next smaller height of the same shape
             break
     return '' if (width, height) == (1920, 1080) else f'{width}x{height}'
