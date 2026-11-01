@@ -18,6 +18,7 @@ import queue
 import re
 import runpy
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -28,6 +29,7 @@ import webbrowser
 import zipfile
 
 FROZEN = getattr(sys, 'frozen', False)
+IS_LINUX = sys.platform.startswith('linux')  # the Steam Deck AppImage
 PORT_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PORT_DIR / 'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -35,7 +37,16 @@ import trophies  # noqa: E402  (scripts/trophies.py: the games' trophy lists)
 import uncharted_i18n
 
 DATA_DIR = Path(os.environ.get('BB_DATA_DIR', PORT_DIR))
-CONFIG_DIR = Path(os.environ.get('APPDATA', Path.home())) / 'uncharted-launcher'
+
+
+def config_dir(platform=sys.platform, env=os.environ):
+    """The launcher's settings folder: %APPDATA% on Windows, $XDG_CONFIG_HOME (~/.config) on Linux."""
+    if platform.startswith('linux'):
+        return Path(env.get('XDG_CONFIG_HOME') or Path.home() / '.config') / 'uncharted-launcher'
+    return Path(env.get('APPDATA', Path.home())) / 'uncharted-launcher'
+
+
+CONFIG_DIR = config_dir()
 CONFIG_FILE = CONFIG_DIR / 'settings.json'
 NAME = 'Uncharted'
 AUTHOR = 'SuperMedo'
@@ -259,6 +270,8 @@ def select_run_problem(current, output):
 
 def attach_stdio():
     """A windowed executable starts without sys.stdout; inherited pipes or a console still exist."""
+    if IS_LINUX:  # the streams are already there
+        return
     import msvcrt
     for name, std in (('stdout', -11), ('stderr', -12)):
         if getattr(sys, name) is not None:
@@ -295,6 +308,8 @@ def run_role(argv):
 
 
 def run_command():
+    if IS_LINUX:
+        return ['bash', str(PORT_DIR / 'run.sh')]
     return [sys.executable, '--run'] if FROZEN else [sys.executable, str(PORT_DIR / 'run.py')]
 
 
@@ -439,8 +454,8 @@ def vibration_strength(s):
 def controller_probe_path():
     """The packaged or development loader, which also provides the lightweight controller probe."""
     configured = os.environ.get('BB_PROBE')
-    candidates = ([Path(configured)] if configured else []) + [PORT_DIR / 'bin' / 'bb-probe.exe',
-                                                               PORT_DIR / 'out' / 'bb-probe.exe']
+    probe = 'bb-probe' if IS_LINUX else 'bb-probe.exe'
+    candidates = ([Path(configured)] if configured else []) + [PORT_DIR / 'bin' / probe, PORT_DIR / 'out' / probe]
     return next((path for path in candidates if path.is_file()), None)
 
 
@@ -469,6 +484,8 @@ def parse_controller_probe(text):
 
 def side_buttons():
     """(Mouse 4, Mouse 5) held right now: the system's XBUTTON1 / XBUTTON2 (virtual keys 5 and 6)."""
+    if IS_LINUX:  # Tk sees them as buttons 8 and 9 instead
+        return (False, False)
     try:
         return tuple(bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000) for vk in (5, 6))
     except (AttributeError, OSError):
@@ -477,6 +494,8 @@ def side_buttons():
 
 def display_refresh_rate():
     """Refresh rate of the main display in Hz, or None."""
+    if IS_LINUX:
+        return None
     try:
         class DevMode(ctypes.Structure):
             _fields_ = [('name', ctypes.c_wchar * 32), ('spec', ctypes.c_ushort), ('driver', ctypes.c_ushort),
@@ -534,6 +553,8 @@ def write_input_ini(s):
 
 def screen_size():
     """(width, height) of the main display in pixels, or None."""
+    if IS_LINUX:  # the game takes the screen's size in fullscreen
+        return None
     try:
         user32 = ctypes.windll.user32
         return int(user32.GetSystemMetrics(0)), int(user32.GetSystemMetrics(1))
@@ -671,7 +692,7 @@ class Launcher:
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.after(100, self.drain_output)
         root.after(150, self.detect_controller)
-        if self.app.get('check_updates', True):
+        if self.app.get('check_updates', True) and not IS_LINUX:  # Linux: a new AppImage by hand
             threading.Thread(target=self.check_update, daemon=True).start()
 
     def px(self, size):
@@ -1254,8 +1275,9 @@ class Launcher:
         self.choice(steam, 'steam_entries', [('collection', 'One entry for the collection'),
                                              ('games', 'One entry per game')], width=26).pack(
             anchor='w', pady=(self.px(6), 0))
-        self.pill(row, _('Desktop shortcut'), self.shortcut, background=SURFACE, padding=(14, 6)).pack(
-            side='left', anchor='n', padx=(self.px(8), 0))
+        if not IS_LINUX:  # a Windows .lnk; on Linux Add to Steam is the way in
+            self.pill(row, _('Desktop shortcut'), self.shortcut, background=SURFACE, padding=(14, 6)).pack(
+                side='left', anchor='n', padx=(self.px(8), 0))
         self.ready = tk.Label(shell, text='', bg=SURFACE, fg=MUTED, font=self.font_ui_sm,
                               wraplength=self.px(820), justify='left')
         self.ready.pack(anchor='w', padx=self.px(22), pady=(0, self.px(16)))
@@ -2142,7 +2164,8 @@ class Launcher:
         try:
             self.process = subprocess.Popen(run_command(), cwd=PORT_DIR, env=env,
                                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                            stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
+                                            stderr=subprocess.STDOUT, creationflags=NO_WINDOW,
+                                            start_new_session=IS_LINUX)
         except OSError as error:
             self.append(_('Could not start: {}').format(error) + '\n')
             self.process = None
@@ -2249,7 +2272,7 @@ class Launcher:
         path = Path(path or DATA_DIR)
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
-        os.startfile(str(path))
+        open_target(str(path))
 
     # ---- updates -------------------------------------------------------------------------------
     def check_update(self, manual=False):
@@ -2611,9 +2634,13 @@ class Launcher:
 
 class GameJob:
     """A Windows job holding run.py and everything it starts (the game, the next game of the
-    collection, an in-game restart), so Stop ends all of them."""
+    collection, an in-game restart), so Stop ends all of them. On Linux the process group run.sh
+    leads (started with start_new_session) does the same."""
 
     def __init__(self, process):
+        self.process, self.handle = process, None
+        if IS_LINUX:
+            return
         self.kernel32 = ctypes.windll.kernel32
         self.kernel32.CreateJobObjectW.restype = ctypes.c_void_p
         self.handle = self.kernel32.CreateJobObjectW(None, None)
@@ -2625,6 +2652,9 @@ class GameJob:
                 self.handle = None
 
     def terminate(self):
+        if IS_LINUX:
+            os.killpg(self.process.pid, signal.SIGTERM)
+            return True
         return bool(self.handle and self.kernel32.TerminateJobObject(ctypes.c_void_p(self.handle), 1))
 
     def close(self):
@@ -2636,6 +2666,9 @@ class GameJob:
 def terminate_process_tree(process):
     """Stop a launcher process and every child when its Windows job is unavailable."""
     if process.poll() is not None:
+        return
+    if IS_LINUX:
+        os.killpg(process.pid, signal.SIGKILL)
         return
     taskkill = Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32/taskkill.exe'
     result = subprocess.run([str(taskkill), '/PID', str(process.pid), '/T', '/F'],
@@ -2830,7 +2863,8 @@ def play_without_window(settings, start=None):
             return 1
         process = subprocess.Popen(run_command(), cwd=PORT_DIR, env=env,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
+                                   stderr=subprocess.STDOUT, creationflags=NO_WINDOW,
+                                   start_new_session=IS_LINUX)
         for raw in iter(process.stdout.readline, b''):
             text = raw.decode('utf-8', errors='replace')
             log.write(text)
@@ -2839,6 +2873,31 @@ def play_without_window(settings, start=None):
             except (OSError, ValueError):
                 pass
         return process.wait()
+
+
+def show_error(text):
+    """A message with no launcher window open: Windows' own message box, or Tk's on Linux (also
+    in the Deck's Gaming Mode, where a Steam entry may find its game folder's card missing)."""
+    if not IS_LINUX:
+        ctypes.windll.user32.MessageBoxW(None, text, NAME, 0x10)
+        return
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(NAME, text, parent=root)
+        root.destroy()
+    except Exception:  # no display: the message still reaches the log
+        print(text, file=sys.stderr)
+
+
+def open_target(target):
+    """Opens a folder or a URL (steam://...) with the system's handler."""
+    if IS_LINUX:
+        subprocess.Popen(['xdg-open', target])
+    else:
+        os.startfile(target)
 
 
 def main():
@@ -2854,7 +2913,7 @@ def main():
     if play:  # --play u1|u2|u3: that game, or a message (never another game)
         problem = play_problem(settings, play)
         if problem:
-            ctypes.windll.user32.MessageBoxW(None, problem, NAME, 0x10)
+            show_error(problem)
             sys.exit(2)
         sys.exit(play_without_window(settings, play))
     if play == '' and game_available(settings, settings['start']):
