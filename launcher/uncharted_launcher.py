@@ -13,7 +13,7 @@ needs no Python installation.
 import ctypes
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import queue
 import re
 import runpy
@@ -88,7 +88,7 @@ WINDOW_SIZES = [('1280x720', '1280 × 720'), ('1600x900', '1600 × 900'),
 # The size the games themselves render and show (BB_GAME_RES: run.py, src/runtime_display.c): a real
 # higher resolution, not an enlarged 1080p picture. The height here and the shape below make the
 # width; the games keep their memory for it, so the sizes stop where it runs out.
-RENDER_HEIGHTS = [('1080', "1080p (the games' own)"), ('1440', '1440p'), ('1620', '1620p'), ('2160', '2160p (4K)')]
+RENDER_HEIGHTS = [('800', '800p (Steam Deck)'), ('1080', "1080p (the games' own)"), ('1440', '1440p'), ('1620', '1620p'), ('2160', '2160p (4K)')]
 ASPECTS = [('16:9', "16:9 (the games' own)"), ('21:9', '21:9 ultrawide'), ('32:9', '32:9 super ultrawide'),
            ('window', "The shape of the window or screen")]
 ASPECT_RATIOS = {'16:9': 16 / 9, '21:9': 64 / 27, '32:9': 32 / 9}
@@ -235,8 +235,52 @@ APP_DEFAULTS = {'game_dir': '', 'game_dir_u1': '', 'game_dir_u2': '', 'game_dir_
                 'gyro_precision_speed': '0.75', 'gyro_invert_x': False, 'gyro_invert_y': False,
                 'gyro_space': '4', 'gyro_local_angle': '0.00', 'gyro_complement': '100.00',
                 'gyro_rotate': '0.00', 'art_banner': '', 'art_u1': '', 'art_u2': '', 'art_u3': '', 'steam_art': '', 'art_crops': {}, 'shortcut_name': 'Uncharted: The Nathan Drake Collection', 'shortcut_icon': '', 'steam_entries': 'collection', 'trophy_game': 'u1', 'pad_vibration': True, 'pad_vibration_strength': '100', 'button_prompts': 'auto', 'key_bindings': {}, 'pad_bindings': {}, 'check_updates': True,
+                'steam_added': False,
                 **{key: 'auto' for key in FIXES},
                 **{f'{game}_infinite_{cheat}': False for game, _t, _s, _e in GAMES for cheat in ('health', 'ammo')}}
+
+# A Steam Deck's own defaults (PR 734's measured Deck settings, docs/STEAM_DECK.md): its 1280x800
+# screen in full, 120 Hz game timing (a late frame waits 8 ms more instead of 16), no AA or frame
+# generation. Steam does the gyro there (Steam Input), so its aiming fix is on and the built-in gyro off.
+DECK_DEFAULTS = {'fullscreen': True, 'present_mode': 'Mailbox', 'frame_rate': '120', 'window_size': '1280x800',
+                 'render_height': '800', 'aspect': 'window', 'scaler': 'fsr1', 'sharpening': '500',
+                 'anti_aliasing': 'off', 'frame_generation': 'off', 'button_prompts': 'auto',
+                 'fix_job_sleep': 'on', 'gyro_aim': True, 'gyro_builtin': False}
+
+
+def is_steam_deck(dmi=Path('/sys/devices/virtual/dmi/id')):
+    """A Steam Deck: Valve's board, LCD (Jupiter) or OLED (Galileo)."""
+    if not IS_LINUX:
+        return False
+    try:
+        vendor = (dmi / 'board_vendor').read_text().strip()
+        product = (dmi / 'product_name').read_text().strip()
+    except OSError:
+        return False
+    return vendor == 'Valve' and product in ('Jupiter', 'Galileo')
+
+
+def first_page(settings):
+    """The page the launcher opens on: the game folder until one is chosen, then Play."""
+    folders = ('game_dir', 'game_dir_u1', 'game_dir_u2', 'game_dir_u3')
+    return 'play' if any(settings.get(key) for key in folders) else 'game'
+
+
+def deck_hint(settings):
+    """On a Steam Deck with a game folder chosen and no Steam entry written yet: what to do next."""
+    if not is_steam_deck() or first_page(settings) == 'game' or settings.get('steam_added'):
+        return ''
+    return _('Next: Add to Steam, then play from Gaming Mode.')
+
+
+def window_title():
+    system = ('Steam Deck' if is_steam_deck() else 'Linux') if IS_LINUX else 'Windows'
+    return f'{NAME} — The Nathan Drake Collection for {system} · by {AUTHOR}'
+
+
+def app_defaults():
+    """The settings a player has not changed: the Deck's on a Steam Deck."""
+    return {**APP_DEFAULTS, **DECK_DEFAULTS} if is_steam_deck() else dict(APP_DEFAULTS)
 
 
 UI_LANGUAGE = 'en'
@@ -582,7 +626,7 @@ def game_resolution(s, screen=None):
     else:
         ratio = ASPECT_RATIOS.get(shape, 16 / 9)
     ratio = min(max(ratio, 1.0), 4.0)
-    for height in sorted({height, 2160, 1800, 1620, 1440, 1260, 1080, 900, 720}, reverse=True):
+    for height in sorted({height, 2160, 1800, 1620, 1440, 1260, 1080, 900, 800, 720}, reverse=True):
         if height > int(s.get('render_height') or 1080) if str(s.get('render_height') or '1080').isdigit() else height > 1080:
             continue
         width = SCREEN_WIDTHS.get((shape, height)) or int(round(height * ratio / 2)) * 2
@@ -667,7 +711,7 @@ class Launcher:
         global UI_LANGUAGE
         self.tk, self.ttk, self.filedialog, self.messagebox = tk, ttk, filedialog, messagebox
         self.root = root
-        self.app = {**APP_DEFAULTS, **load_json(CONFIG_FILE, {}), **gyro_from_ini()}
+        self.app = {**app_defaults(), **load_json(CONFIG_FILE, {}), **gyro_from_ini()}
         UI_LANGUAGE = uncharted_i18n.language_code(self.app.get('ui_language', ''))
         self.configure_art()
         self.vars = {}
@@ -679,7 +723,7 @@ class Launcher:
         self.card_hot = None
         self.info, self.available = None, {}
         self.update_box = None
-        root.title(f'{NAME} — The Nathan Drake Collection for Windows · by {AUTHOR}')
+        root.title(window_title())
         root.configure(bg=BG)
         self.dpi = root.winfo_fpixels('1i') / 96.0
         root.geometry(f'{self.px(1180)}x{self.px(860)}')
@@ -688,7 +732,7 @@ class Launcher:
         self.load_fonts()
         self.style()
         self.build()
-        self.show('play')
+        self.show(first_page(self.app))
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.after(100, self.drain_output)
         root.after(150, self.detect_controller)
@@ -1149,7 +1193,8 @@ class Launcher:
             self.nav[name], self.nav_pills[name], self.nav_marks[name] = item, pill, mark
         tk.Frame(side, bg=BG).pack(fill='both', expand=True)
         self.side = side
-        self.side_note = tk.Label(side, text=_('Native port: the original PS4 game code runs directly on Windows.'),
+        self.side_note = tk.Label(side, text=_('Native port: the original PS4 game code runs directly on Linux.')
+                                  if IS_LINUX else _('Native port: the original PS4 game code runs directly on Windows.'),
                                   bg=BG, fg=MUTED, font=('Segoe UI', 9), justify='left',
                                   wraplength=side_w - 36)
         self.side_note.pack(anchor='w', padx=18, pady=(0, 18))
@@ -1278,6 +1323,9 @@ class Launcher:
         if not IS_LINUX:  # a Windows .lnk; on Linux Add to Steam is the way in
             self.pill(row, _('Desktop shortcut'), self.shortcut, background=SURFACE, padding=(14, 6)).pack(
                 side='left', anchor='n', padx=(self.px(8), 0))
+        self.hint = tk.Label(shell, text=deck_hint(self.app), bg=SURFACE, fg=GOLD, font=self.font_ui,
+                             anchor='w', justify='left')
+        self.hint.pack(anchor='w', padx=self.px(22), pady=(0, self.px(8)))
         self.ready = tk.Label(shell, text='', bg=SURFACE, fg=MUTED, font=self.font_ui_sm,
                               wraplength=self.px(820), justify='left')
         self.ready.pack(anchor='w', padx=self.px(22), pady=(0, self.px(16)))
@@ -2596,7 +2644,7 @@ class Launcher:
             if not self.messagebox.askyesno(NAME, _('Steam has to close while the game is added; it starts '
                                                     'again afterwards. Close Steam now?')):
                 return
-            subprocess.Popen([str(steam / 'steam.exe'), '-shutdown'], creationflags=NO_WINDOW)
+            subprocess.Popen(bbport_steam.shutdown_command(steam), creationflags=NO_WINDOW)
             for _i in range(60):
                 time.sleep(0.5)
                 if not bbport_steam.steam_running():
@@ -2612,11 +2660,17 @@ class Launcher:
                     add_steam_games(config)
                 else:
                     add_steam_collection(config, self.app)
+                write_control_layout(steam, config, list(STEAM_TITLES.values()) if kind == 'games'
+                                     else [COLLECTION_TITLE])
         except (OSError, ValueError) as error:
             self.messagebox.showerror(NAME, _('Could not add the games to Steam: {}').format(error))
             return
+        self.app['steam_added'] = True
+        self.collect()
+        if getattr(self, 'hint', None):
+            self.hint.configure(text='')
         if restart:
-            os.startfile('steam://open/games')
+            open_target('steam://open/games')
         if kind == 'games':
             self.messagebox.showinfo(NAME, _('Uncharted 1, 2 and 3 are in your Steam library. Each starts with the '
                                              'settings saved in this launcher.'))
@@ -2741,11 +2795,28 @@ COLLECTION_TITLE = 'Uncharted: The Nathan Drake Collection'  # the single entry 
 
 
 def steam_launch():
-    """(exe, launch options before the game key) of a Steam shortcut that starts this launcher."""
+    """(exe, launch options before the game key) of a Steam shortcut that starts this launcher: on
+    Linux the AppImage it runs from (the runtime's $APPIMAGE)."""
+    if IS_LINUX and os.environ.get('APPIMAGE'):
+        return PurePosixPath(os.environ['APPIMAGE']), '--play'
     if FROZEN:
         return Path(sys.executable), '--play'
     pythonw = Path(sys.executable).with_name('pythonw.exe')
     return (pythonw if pythonw.exists() else Path(sys.executable)), f'"{Path(__file__).resolve()}" --play'
+
+
+def steam_start_dir(exe):
+    """The Steam entry's start folder: the AppImage's on Linux (the package itself is only mounted
+    while it runs), else the port folder."""
+    return exe.parent if IS_LINUX else PORT_DIR
+
+
+def moved_entry(fields):
+    """Linux: one of this launcher's entries that starts the AppImage from where it was before it
+    was moved (Add to Steam again replaces it rather than adding a second)."""
+    return (IS_LINUX and str(fields.get('exe', '')).lower().endswith('.appimage"')
+            and fields.get('appname') in {COLLECTION_TITLE, *STEAM_TITLES.values()}
+            and str(fields.get('launchoptions', '')).strip().startswith('--play'))
 
 
 def steam_games():
@@ -2762,9 +2833,9 @@ def add_steam_shortcuts(vdf_path, now=None, icons=None):
     exe, play = steam_launch()
 
     def old_collection(fields):
-        return (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
-                and str(fields.get('launchoptions', '')).strip() == play)
-    wanted = [(name, str(exe), str(PORT_DIR), str((icons or {}).get(key, exe)), options)
+        return moved_entry(fields) or (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
+                                       and str(fields.get('launchoptions', '')).strip() == play)
+    wanted = [(name, str(exe), str(steam_start_dir(exe)), str((icons or {}).get(key, exe)), options)
               for key, name, options in steam_games()]
     return exe, bbport_steam.set_shortcuts(vdf_path, wanted, old_collection, now)
 
@@ -2794,9 +2865,9 @@ def add_collection_shortcut(vdf_path, now=None):
     games = {options for _key, _name, options in steam_games()}
 
     def game_entry(fields):
-        return (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
-                and str(fields.get('launchoptions', '')).strip() in games)
-    wanted = [(COLLECTION_TITLE, str(exe), str(PORT_DIR), str(exe), play)]
+        return moved_entry(fields) or (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
+                                       and str(fields.get('launchoptions', '')).strip() in games)
+    wanted = [(COLLECTION_TITLE, str(exe), str(steam_start_dir(exe)), str(exe), play)]
     return exe, bbport_steam.set_shortcuts(vdf_path, wanted, game_entry, now)
 
 
@@ -2815,6 +2886,34 @@ def add_steam_collection(config, settings, now=None):
     except Exception:  # pictures are a nicety: the shortcut works without them
         pass
     return exe, result
+
+
+# Steam Input layout for a Steam Deck (launcher/steamdeck): Steam's Gamepad template with gyro to
+# mouse as Ben set it up for the DualSense (2.7x, Dots Per 360 2400, Player Space, his gyro button).
+DECK_LAYOUT = Path(__file__).resolve().parent / 'steamdeck' / 'controller_neptune.vdf'
+
+
+def layout_folder(steam, config, name):
+    """Where Steam keeps one account's (userdata/<id>/config) layouts for a non-Steam entry: its
+    name in lower case."""
+    return (Path(steam) / 'steamapps' / 'common' / 'Steam Controller Configs' / Path(config).parent.name
+            / 'config' / name.lower())
+
+
+def write_control_layout(steam, config, names):
+    """The Deck layout for each Steam entry name (Linux only), where Steam finds it the first time
+    the entry starts. A layout already there (the player's own) is kept. Returns the files written."""
+    if not IS_LINUX:
+        return []
+    written = []
+    for name in names:
+        path = layout_folder(steam, config, name) / 'controller_neptune.vdf'
+        if path.exists():
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(DECK_LAYOUT, path)
+        written.append(path)
+    return written
 
 
 def play_request(args):
@@ -2908,7 +3007,7 @@ def main():
         sys.exit(install_update(args[1], args[2]))
     if FROZEN and UPDATE_DIR not in PORT_DIR.parents:
         shutil.rmtree(UPDATE_DIR, ignore_errors=True)  # what a finished update left behind
-    settings = {**APP_DEFAULTS, **load_json(CONFIG_FILE, {})}
+    settings = {**app_defaults(), **load_json(CONFIG_FILE, {})}
     play = play_request(args)
     if play:  # --play u1|u2|u3: that game, or a message (never another game)
         problem = play_problem(settings, play)
