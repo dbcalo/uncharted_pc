@@ -13,7 +13,7 @@ needs no Python installation.
 import ctypes
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import queue
 import re
 import runpy
@@ -2596,7 +2596,7 @@ class Launcher:
             if not self.messagebox.askyesno(NAME, _('Steam has to close while the game is added; it starts '
                                                     'again afterwards. Close Steam now?')):
                 return
-            subprocess.Popen([str(steam / 'steam.exe'), '-shutdown'], creationflags=NO_WINDOW)
+            subprocess.Popen(bbport_steam.shutdown_command(steam), creationflags=NO_WINDOW)
             for _i in range(60):
                 time.sleep(0.5)
                 if not bbport_steam.steam_running():
@@ -2616,7 +2616,7 @@ class Launcher:
             self.messagebox.showerror(NAME, _('Could not add the games to Steam: {}').format(error))
             return
         if restart:
-            os.startfile('steam://open/games')
+            open_target('steam://open/games')
         if kind == 'games':
             self.messagebox.showinfo(NAME, _('Uncharted 1, 2 and 3 are in your Steam library. Each starts with the '
                                              'settings saved in this launcher.'))
@@ -2741,11 +2741,28 @@ COLLECTION_TITLE = 'Uncharted: The Nathan Drake Collection'  # the single entry 
 
 
 def steam_launch():
-    """(exe, launch options before the game key) of a Steam shortcut that starts this launcher."""
+    """(exe, launch options before the game key) of a Steam shortcut that starts this launcher: on
+    Linux the AppImage it runs from (the runtime's $APPIMAGE)."""
+    if IS_LINUX and os.environ.get('APPIMAGE'):
+        return PurePosixPath(os.environ['APPIMAGE']), '--play'
     if FROZEN:
         return Path(sys.executable), '--play'
     pythonw = Path(sys.executable).with_name('pythonw.exe')
     return (pythonw if pythonw.exists() else Path(sys.executable)), f'"{Path(__file__).resolve()}" --play'
+
+
+def steam_start_dir(exe):
+    """The Steam entry's start folder: the AppImage's on Linux (the package itself is only mounted
+    while it runs), else the port folder."""
+    return exe.parent if IS_LINUX else PORT_DIR
+
+
+def moved_entry(fields):
+    """Linux: one of this launcher's entries that starts the AppImage from where it was before it
+    was moved (Add to Steam again replaces it rather than adding a second)."""
+    return (IS_LINUX and str(fields.get('exe', '')).lower().endswith('.appimage"')
+            and fields.get('appname') in {COLLECTION_TITLE, *STEAM_TITLES.values()}
+            and str(fields.get('launchoptions', '')).strip().startswith('--play'))
 
 
 def steam_games():
@@ -2762,9 +2779,9 @@ def add_steam_shortcuts(vdf_path, now=None, icons=None):
     exe, play = steam_launch()
 
     def old_collection(fields):
-        return (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
-                and str(fields.get('launchoptions', '')).strip() == play)
-    wanted = [(name, str(exe), str(PORT_DIR), str((icons or {}).get(key, exe)), options)
+        return moved_entry(fields) or (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
+                                       and str(fields.get('launchoptions', '')).strip() == play)
+    wanted = [(name, str(exe), str(steam_start_dir(exe)), str((icons or {}).get(key, exe)), options)
               for key, name, options in steam_games()]
     return exe, bbport_steam.set_shortcuts(vdf_path, wanted, old_collection, now)
 
@@ -2794,9 +2811,9 @@ def add_collection_shortcut(vdf_path, now=None):
     games = {options for _key, _name, options in steam_games()}
 
     def game_entry(fields):
-        return (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
-                and str(fields.get('launchoptions', '')).strip() in games)
-    wanted = [(COLLECTION_TITLE, str(exe), str(PORT_DIR), str(exe), play)]
+        return moved_entry(fields) or (str(fields.get('exe', '')).lower() == f'"{exe}"'.lower()
+                                       and str(fields.get('launchoptions', '')).strip() in games)
+    wanted = [(COLLECTION_TITLE, str(exe), str(steam_start_dir(exe)), str(exe), play)]
     return exe, bbport_steam.set_shortcuts(vdf_path, wanted, game_entry, now)
 
 

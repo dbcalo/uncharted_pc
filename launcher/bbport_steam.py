@@ -5,10 +5,13 @@ shortcuts.vdf is Valve's binary KeyValues: a type byte (0 = map, 1 = string, 2 =
 "shortcuts", whose entries are maps named "0", "1", ...
 """
 import os
+import sys
 from pathlib import Path
 import struct
 import time
 import zlib
+
+IS_LINUX = sys.platform.startswith('linux')
 
 MAP, STRING, INT32, UINT64, END = 0, 1, 2, 7, 8
 
@@ -173,7 +176,12 @@ def set_shortcuts(vdf_path, wanted, replaces=None, now=None):
 
 
 def steam_folder():
-    """Steam's install folder from the registry, or None."""
+    """Steam's install folder: from the registry on Windows, under the home folder on Linux (the
+    Steam Deck's ~/.local/share/Steam), or None."""
+    if IS_LINUX:
+        home = Path.home()
+        return next((path for path in (home / '.local' / 'share' / 'Steam', home / '.steam' / 'steam')
+                     if path.is_dir()), None)
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Valve\Steam') as key:
@@ -190,11 +198,24 @@ def user_configs(steam):
         if users.is_dir() else []
 
 
-def steam_running():
+def steam_running(proc=Path('/proc')):
+    if IS_LINUX:  # a process named steam (not steamwebhelper and the like)
+        for comm in proc.glob('[0-9]*/comm'):
+            try:
+                if comm.read_text().strip() == 'steam':
+                    return True
+            except OSError:
+                pass
+        return False
     import subprocess
     result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq steam.exe', '/NH'], capture_output=True,
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     return b'steam.exe' in result.stdout.lower()
+
+
+def shutdown_command(steam):
+    """The command that asks a running Steam to close."""
+    return ['steam', '-shutdown'] if IS_LINUX else [str(Path(steam) / 'steam.exe'), '-shutdown']
 
 
 if __name__ == '__main__':  # self-test on a temporary file
